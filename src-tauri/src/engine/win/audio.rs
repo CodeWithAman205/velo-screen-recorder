@@ -90,7 +90,7 @@ fn capture_source(source: Source, shared: &Shared, mixer: &Mutex<Mixer>) -> Resu
         let samples: Vec<f32> = {
             let n = bytes.len() / 4 * 4;
             let raw: Vec<u8> = bytes.drain(..n).collect();
-            raw.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect()
+            raw.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect()
         };
         let mut mixer = mixer.lock();
         match source {
