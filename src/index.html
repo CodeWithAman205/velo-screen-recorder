@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:," />
+  <title>VELO Screen Recorder</title>
+  <link rel="stylesheet" href="styles/tokens.css" />
+  <link rel="stylesheet" href="styles/layout.css" />
+  <link rel="stylesheet" href="styles/components.css" />
+  <script>
+    try { document.documentElement.dataset.theme = localStorage.getItem('velo-theme') || 'light'; } catch (_) {}
+  </script>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><path d="M3 5h7l6 14 6-14h7L16 29z"/></svg>
+        <div class="brand-text"><div class="brand-name">VELO</div><div class="brand-sub">Power Suite</div></div>
+      </div>
+      <nav class="nav" id="nav" aria-label="Main"></nav>
+      <div class="nav-foot">
+        <button class="nav-item" data-icon="settings" data-label="Preferences" data-chev></button>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="titlebar" data-tauri-drag-region>
+        <div class="crumbs" id="crumbs"></div>
+        <div class="tools">
+          <button class="icon-btn" id="theme-btn" aria-label="Toggle theme"></button>
+          <button class="icon-btn" aria-label="Notifications"><span data-icon="bell"></span><span class="badge">3</span></button>
+          <span class="divider"></span>
+          <button class="icon-btn win" aria-label="Minimize" data-win="minimize"><span data-icon="minus"></span></button>
+          <button class="icon-btn win" aria-label="Maximize" data-win="toggleMaximize"><span data-icon="copy"></span></button>
+          <button class="icon-btn win close" aria-label="Close" data-win="close"><span data-icon="x"></span></button>
+        </div>
+      </header>
+      <main class="content"><div class="page" id="page" data-accent="rose"></div></main>
+    </div>
+  </div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
