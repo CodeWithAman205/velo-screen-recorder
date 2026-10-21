@@ -1,7 +1,8 @@
 import { icon, hydrate, fmtTime } from './ui.js';
-import { invoke, windowControl } from './bridge.js';
-import { settings, set, toggle, resetSettings, session, library, removeRecording, editor, ui, subscribe } from './state.js';
+import { inTauri, invoke, listen, windowControl } from './bridge.js';
+import { settings, set, toggle, resetSettings, session, library, removeRecording, editor, ui, subscribe, devices, setDevices } from './state.js';
 import * as sess from './session.js';
+import { connectBackend } from './session.js';
 import { view as recordView } from './views/record.js';
 import { view as libraryView } from './views/library.js';
 import { view as editorView, paintCanvas } from './views/editor.js';
@@ -102,6 +103,8 @@ document.addEventListener('click', (e) => {
     if (key === 'countdown') val = val === 'Off' ? '0' : val;
     if (key === 'theme') { val = val.toLowerCase(); applyTheme(val); return render(); }
     assign(key, val);
+    if (key === 'onClose') invoke('set_close_to_tray', { enabled: val === 'Hide to tray' });
+    if (key === 'mode' && val === 'window') refreshSources();
     render();
   }
 });
@@ -149,8 +152,10 @@ document.querySelectorAll('[data-win]').forEach((b) => b.addEventListener('click
 window.addEventListener('hashchange', () => go(location.hash.replace('#/', '')));
 
 // ---------- Live updates ----------
-subscribe((kind) => {
-  if (kind === 'tick') {
+subscribe((kind, payload) => {
+  if (kind === 'error') {
+    toast(payload);
+  } else if (kind === 'tick') {
     document.querySelectorAll('[data-timer]').forEach((n) => { n.textContent = fmtTime(session.seconds); });
   } else {
     render();
@@ -159,15 +164,37 @@ subscribe((kind) => {
 
 // Level meters. In the browser preview these are simulated; Tauri replaces them with real levels.
 const levels = { mic: 0, system: 0 };
+const real = { mic: 0, system: 0 };
 setInterval(() => {
   document.querySelectorAll('[data-meter]').forEach((m) => {
     if (m.classList.contains('off')) { m.querySelectorAll('i').forEach((b) => { b.className = ''; }); return; }
     const id = m.dataset.meter;
-    levels[id] = levels[id] * 0.6 + Math.random() * 0.4 * (id === 'mic' ? 1 : 0.8);
+    const target = inTauri ? Math.sqrt(real[id]) : Math.random() * (id === 'mic' ? 1 : 0.8);
+    levels[id] = inTauri ? target : levels[id] * 0.6 + target * 0.4;
     const on = Math.round(levels[id] * 16 * 1.4);
     m.querySelectorAll('i').forEach((b, i) => { b.className = i < on ? (i > 13 ? 'max' : i > 10 ? 'hot' : 'on') : ''; });
   });
 }, 120);
 
+// ---------- Real devices and events (Tauri only) ----------
+async function refreshSources() {
+  const found = await invoke('list_sources');
+  if (!found) return;
+  setDevices(found);
+  if (settings.display >= devices.displays.length) set('display', 0);
+  if (settings.window >= devices.windows.length) set('window', 0);
+  if (settings.micDevice >= devices.mics.length) set('micDevice', 0);
+  render();
+}
+
+async function initBackend() {
+  if (!inTauri) return;
+  await connectBackend();
+  await listen('levels', (l) => { real.mic = l.mic; real.system = l.system; });
+  invoke('set_close_to_tray', { enabled: settings.onClose === 'Hide to tray' });
+  refreshSources();
+}
+
 hydrate();
 go(location.hash.replace('#/', '') || 'record');
+initBackend();

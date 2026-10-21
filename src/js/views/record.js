@@ -40,6 +40,9 @@ function liveOverlay() {
 }
 
 function startCard() {
+  if (session.saving) {
+    return card({ ic: 'film', title: 'Saving', body: `<div class="empty">${icon('film')}<b>Finishing your video</b><span>This takes a moment.</span></div>` });
+  }
   if (session.counting) {
     return card({ ic: 'timer', title: 'Get ready', body: `<div class="record-cta"><button class="btn lg block" data-act="cancel">${icon('x')}Cancel</button></div>` });
   }
@@ -58,6 +61,7 @@ function startCard() {
   return card({
     ic: 'circle-dot', title: 'Ready to record', hint: `${settings.quality} &middot; ${settings.fps} fps`,
     body: `
+      ${row({ ic: 'sparkles', title: 'Mode', sub: settings.recordMode === 'Studio' ? 'Keeps zoom and effects editable' : 'Saves a finished video right away', ctl: seg('recordMode', ['Studio', 'Quick'], settings.recordMode) })}
       ${row({ ic: 'timer', title: 'Countdown', ctl: seg('countdown', ['Off', '3', '5', '10'], settings.countdown === '0' ? 'Off' : settings.countdown) })}
       <div class="record-cta" style="margin-top:16px">
         <button class="btn danger lg block" data-act="start">${icon('circle-dot')}Start recording</button>
@@ -67,7 +71,7 @@ function startCard() {
 }
 
 export function view() {
-  const busy = session.recording || session.counting;
+  const busy = session.recording || session.counting || session.saving;
   const camOn = settings.camera && settings.mode !== 'camera';
 
   const modeTiles = `<div class="tiles">${MODES.map((m) => `

@@ -19,6 +19,7 @@ const defaults = {
   cursor: true,
   clicks: true,
   autoZoom: true,
+  recordMode: 'Studio',
   countdown: '3',
   quality: '1080p',
   fps: '60',
@@ -51,6 +52,10 @@ export function resetSettings() { Object.assign(settings, defaults); write(SETTI
 export function toggle(key) { set(key, !settings[key]); }
 
 // Replaced by real devices from the Rust side (list_sources) when running in Tauri.
+export function setDevices(next) {
+  if (next) Object.assign(devices, next);
+}
+
 export const devices = {
   displays: [
     { name: 'Display 1', detail: '1920 x 1080 (main)' },
@@ -66,7 +71,7 @@ export const devices = {
   speakers: ['Default speakers', 'Headphones'],
 };
 
-export const session = { recording: false, paused: false, seconds: 0, counting: 0 };
+export const session = { recording: false, paused: false, saving: false, seconds: 0, counting: 0 };
 
 export const library = read(LIBRARY_KEY, []);
 export function addRecording(rec) { library.unshift(rec); write(LIBRARY_KEY, library); }
@@ -97,4 +102,4 @@ export const BACKGROUNDS = [
 
 const listeners = new Set();
 export const subscribe = (fn) => listeners.add(fn);
-export const emit = (kind) => listeners.forEach((fn) => fn(kind));
+export const emit = (kind, payload) => listeners.forEach((fn) => fn(kind, payload));
