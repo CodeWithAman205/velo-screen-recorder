@@ -41,7 +41,7 @@ pub fn close(app: &AppHandle) {
 }
 
 #[cfg(windows)]
-fn exclude_from_capture(window: &tauri::WebviewWindow) {
+pub fn exclude_from_capture(window: &tauri::WebviewWindow) {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::{SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE};
     // Tauri may use a different `windows` version, so pass the handle across as a plain pointer.
@@ -52,4 +52,4 @@ fn exclude_from_capture(window: &tauri::WebviewWindow) {
 }
 
 #[cfg(not(windows))]
-fn exclude_from_capture(_: &tauri::WebviewWindow) {}
+pub fn exclude_from_capture(_: &tauri::WebviewWindow) {}

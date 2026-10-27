@@ -8,7 +8,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
-use velo_core::{Levels, Mixer, StartConfig, SAMPLE_RATE};
+use velo_core::{Levels, MicProcessor, Mixer, StartConfig, SAMPLE_RATE};
 use wasapi::{initialize_mta, DeviceEnumerator, Direction, SampleType, StreamMode, WaveFormat};
 
 pub struct Audio {
@@ -34,10 +34,11 @@ pub fn start(cfg: &StartConfig, shared: Arc<Shared>, levels: LevelsSink) -> Audi
     let mixer = Arc::new(Mutex::new(Mixer::new(1.0, cfg.mic_gain.min(100) as f32 / 100.0)));
     let mut threads = Vec::new();
 
+    let denoise = cfg.noise;
     let mut spawn_source = |source: Source| {
         let (shared, mixer) = (shared.clone(), mixer.clone());
         threads.push(thread::spawn(move || {
-            if let Err(e) = capture_source(source, &shared, &mixer) {
+            if let Err(e) = capture_source(source, denoise, &shared, &mixer) {
                 eprintln!("audio {source:?} stopped: {e}");
             }
         }));
@@ -54,7 +55,7 @@ pub fn start(cfg: &StartConfig, shared: Arc<Shared>, levels: LevelsSink) -> Audi
 }
 
 /// Reads one device and pushes 48 kHz stereo f32 into the mixer until recording stops.
-fn capture_source(source: Source, shared: &Shared, mixer: &Mutex<Mixer>) -> Result<(), String> {
+fn capture_source(source: Source, denoise: bool, shared: &Shared, mixer: &Mutex<Mixer>) -> Result<(), String> {
     // COM may already be initialised on this thread; that is fine.
     let _ = initialize_mta();
     let e = |x: wasapi::WasapiError| x.to_string();
@@ -81,6 +82,8 @@ fn capture_source(source: Source, shared: &Shared, mixer: &Mutex<Mixer>) -> Resu
     client.start_stream().map_err(e)?;
 
     let mut bytes: VecDeque<u8> = VecDeque::new();
+    // Only the microphone is cleaned up; system sound is already clean.
+    let mut mic_processor = matches!(source, Source::Mic(_)).then(|| MicProcessor::new(denoise));
     while !shared.stop.load(Ordering::Relaxed) {
         // Loopback delivers nothing while the PC is silent, so a timeout is normal.
         if event.wait_for_event(100).is_err() {
@@ -93,9 +96,9 @@ fn capture_source(source: Source, shared: &Shared, mixer: &Mutex<Mixer>) -> Resu
             raw.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect()
         };
         let mut mixer = mixer.lock();
-        match source {
-            Source::System => mixer.push_system(&samples),
-            Source::Mic(_) => mixer.push_mic(&samples),
+        match (source, mic_processor.as_mut()) {
+            (Source::Mic(_), Some(processor)) => mixer.push_mic(&processor.process(&samples)),
+            _ => mixer.push_system(&samples),
         }
     }
     let _ = client.stop_stream();

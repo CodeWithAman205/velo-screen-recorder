@@ -21,7 +21,8 @@ pub fn list_sources() -> Sources {
         .map(|(i, m)| {
             let (w, h) = (m.width().unwrap_or(0), m.height().unwrap_or(0));
             let main = if Some(m.as_raw_hmonitor() as usize) == primary { " (main)" } else { "" };
-            SourceInfo { name: m.name().unwrap_or_else(|_| format!("Display {}", i + 1)), detail: format!("{w} x {h}{main}") }
+            let name = m.name().ok().filter(|n| !n.trim().is_empty()).unwrap_or_else(|| format!("Display {}", i + 1));
+            SourceInfo { name, detail: format!("{w} x {h}{main}") }
         })
         .collect();
 

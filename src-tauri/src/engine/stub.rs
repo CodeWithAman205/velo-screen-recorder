@@ -1,5 +1,6 @@
-use super::{Finished, LevelsSink, SourceInfo, Sources};
-use velo_core::StartConfig;
+use super::{FrameSink, LevelsSink, SourceInfo, Sources};
+use velo_core::library::DataDirs;
+use velo_core::{CaptureMode, Entry, StartConfig};
 
 const UNSUPPORTED: &str = "Recording is only available on Windows.";
 
@@ -13,10 +14,22 @@ pub fn list_sources() -> Sources {
     }
 }
 
+pub fn snapshot(_: CaptureMode, _: usize, _: u32) -> Result<Vec<u8>, String> {
+    Err(UNSUPPORTED.into())
+}
+
+pub struct Preview;
+
+impl Preview {
+    pub fn start(_: CaptureMode, _: usize, _: FrameSink) -> Result<Self, String> {
+        Err(UNSUPPORTED.into())
+    }
+}
+
 pub struct Recording;
 
 impl Recording {
-    pub fn start(_: StartConfig, _: LevelsSink) -> Result<Self, String> {
+    pub fn start(_: StartConfig, _: DataDirs, _: LevelsSink) -> Result<Self, String> {
         Err(UNSUPPORTED.into())
     }
     pub fn pause(&self) {}
@@ -27,7 +40,7 @@ impl Recording {
     pub fn elapsed_ms(&self) -> u64 {
         0
     }
-    pub fn finish(self) -> Result<Finished, String> {
+    pub fn finish(self) -> Result<Entry, String> {
         Err(UNSUPPORTED.into())
     }
 }

@@ -3,21 +3,24 @@
 
 mod audio;
 mod capture;
+mod grab;
 mod input;
 mod sources;
 
-use super::{Finished, LevelsSink};
+use super::{now_ms, output_folder, LevelsSink};
 use parking_lot::Mutex;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
-use velo_core::{CaptureMode, Clock, Project, StartConfig};
+use velo_core::library::DataDirs;
+use velo_core::{CaptureMode, Clock, Entry, Project, StartConfig};
 use velo_director::{InputEvent, Size};
 use windows::Win32::System::SystemInformation::GetLocalTime;
 use windows_capture::capture::CaptureControl;
 use windows_capture::encoder::VideoEncoder;
 
+pub use grab::{snapshot, Preview};
 pub use sources::list_sources;
 
 const NO_FRAME: u64 = u64::MAX;
@@ -69,24 +72,30 @@ pub struct Recording {
     audio: Option<audio::Audio>,
     input: Option<input::Input>,
     cfg: StartConfig,
+    dirs: DataDirs,
+    id: String,
     video_path: PathBuf,
+    thumbnail_path: PathBuf,
     screen: Size,
     fps: u32,
 }
 
 impl Recording {
-    pub fn start(cfg: StartConfig, levels: LevelsSink) -> Result<Self, String> {
+    pub fn start(cfg: StartConfig, dirs: DataDirs, levels: LevelsSink) -> Result<Self, String> {
         if matches!(cfg.mode, CaptureMode::Region | CaptureMode::Camera) {
             return Err("This capture mode is coming soon. Use Display or Window for now.".into());
         }
 
         let (date, time) = local_date_time();
-        let folder = resolve_folder(&cfg.folder);
+        let folder = output_folder(&cfg.folder);
         std::fs::create_dir_all(&folder).map_err(|e| format!("Cannot create {}: {e}", folder.display()))?;
+        dirs.ensure().map_err(|e| format!("Cannot prepare the app data folder: {e}"))?;
         let video_path = unique_path(&folder, &cfg.file_stem(&date, &time), "mp4");
+        let id = format!("{:x}", now_ms());
+        let thumbnail_path = dirs.thumbnail_file(&id);
 
         let shared = Shared::new();
-        let started = capture::start(&cfg, &shared, &video_path)?;
+        let started = capture::start(&cfg, &shared, &video_path, &thumbnail_path)?;
 
         let audio = (cfg.system || cfg.mic).then(|| audio::start(&cfg, shared.clone(), levels));
         let input = input::start(shared.clone(), started.origin);
@@ -98,7 +107,10 @@ impl Recording {
             input: Some(input),
             fps: cfg.fps(),
             cfg,
+            dirs,
+            id,
             video_path,
+            thumbnail_path,
             screen: started.screen,
         })
     }
@@ -128,7 +140,7 @@ impl Recording {
         self.shared.first_frame().map_or(0, |t0| self.shared.now_ms().saturating_sub(t0))
     }
 
-    pub fn finish(mut self) -> Result<Finished, String> {
+    pub fn finish(mut self) -> Result<Entry, String> {
         let end_ms = self.shared.now_ms();
         self.shared.stop.store(true, Ordering::Release);
 
@@ -149,27 +161,37 @@ impl Recording {
         let events = std::mem::take(&mut *self.shared.events.lock());
 
         let video_name = self.video_path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-        let project = Project::new(
-            video_name,
-            self.screen,
-            self.fps,
-            duration_ms,
-            offset,
-            self.cfg.studio || !self.cfg.cursor,
-            self.cfg.studio,
-            self.cfg.system,
-            self.cfg.mic,
-            events,
-        );
-        let project_path = Project::path_for(&self.video_path);
-        let project_path = project.save(&project_path).ok().map(|_| project_path.to_string_lossy().into_owned());
+        // Only Studio recordings have editing data; Quick ones are just the video.
+        let project_path = if self.cfg.studio {
+            let project = Project::new(
+                video_name,
+                self.screen,
+                self.fps,
+                duration_ms,
+                offset,
+                true,
+                true,
+                self.cfg.system,
+                self.cfg.mic,
+                events,
+            );
+            let path = self.dirs.project_file(&self.id);
+            project.save(&path).ok().map(|_| path.to_string_lossy().into_owned())
+        } else {
+            None
+        };
 
         let size_mb = std::fs::metadata(&self.video_path).map(|m| m.len() as f64 / 1_048_576.0).unwrap_or(0.0);
-        Ok(Finished {
-            path: self.video_path.to_string_lossy().into_owned(),
-            project_path,
+        Ok(Entry {
+            id: self.id.clone(),
+            name: self.video_path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+            video: self.video_path.to_string_lossy().into_owned(),
+            thumbnail: self.thumbnail_path.exists().then(|| self.thumbnail_path.to_string_lossy().into_owned()),
+            project: project_path,
             seconds: (duration_ms + 500) / 1000,
             size_mb,
+            created_ms: now_ms(),
+            studio: self.cfg.studio,
             screen: self.screen,
         })
     }
@@ -188,16 +210,6 @@ pub fn local_date_time() -> (String, String) {
         format!("{:04}-{:02}-{:02}", t.wYear, t.wMonth, t.wDay),
         format!("{:02}-{:02}-{:02}", t.wHour, t.wMinute, t.wSecond),
     )
-}
-
-fn resolve_folder(configured: &str) -> PathBuf {
-    let home = std::env::var_os("USERPROFILE").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
-    let configured = configured.trim();
-    if configured.is_empty() {
-        return home.join("Videos").join("Velo");
-    }
-    let path = PathBuf::from(configured);
-    if path.is_absolute() { path } else { home.join(path) }
 }
 
 fn unique_path(folder: &std::path::Path, stem: &str, ext: &str) -> PathBuf {

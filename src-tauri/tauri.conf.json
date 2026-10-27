@@ -20,7 +20,10 @@
         "center": true
       }
     ],
-    "security": { "csp": null }
+    "security": {
+      "csp": null,
+      "assetProtocol": { "enable": true, "scope": ["$APPDATA/**", "$APPLOCALDATA/**", "$VIDEO/**"] }
+    }
   },
   "bundle": {
     "active": true,

@@ -14,11 +14,12 @@ crate-type = ["rlib", "cdylib", "staticlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
+tauri = { version = "2", features = ["tray-icon", "protocol-asset"] }
 tauri-plugin-global-shortcut = "2"
 serde.workspace = true
 serde_json.workspace = true
 parking_lot = "0.12"
+base64 = "0.22"
 velo-core = { path = "../crates/velo-core" }
 velo-director = { path = "../crates/velo-director" }
 
