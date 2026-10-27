@@ -6,6 +6,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+nnnoiseless = { version = "0.5", default-features = false }
 serde.workspace = true
 serde_json.workspace = true
 velo-director = { path = "../velo-director" }

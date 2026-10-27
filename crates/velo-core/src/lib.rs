@@ -6,10 +6,15 @@
 
 pub mod clock;
 pub mod config;
+pub mod library;
+pub mod mic;
 pub mod mixer;
 pub mod project;
+pub mod thumb;
 
 pub use clock::Clock;
 pub use config::{CaptureMode, StartConfig};
+pub use library::{Entry, Library};
+pub use mic::MicProcessor;
 pub use mixer::{Levels, Mixer, SAMPLE_RATE};
 pub use project::Project;

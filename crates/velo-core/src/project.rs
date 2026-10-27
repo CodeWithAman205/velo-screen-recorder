@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use velo_director::{InputEvent, Size, ZoomConfig, ZoomSegment};
 
-/// Saved next to every recording as `<name>.velo.json`.
+/// Editing data for a Studio recording, kept in the app's data folder (see `library::DataDirs`).
 ///
 /// The video is untouched footage. This file holds everything needed to re-render it with zoom,
 /// a smooth cursor and a background, so edits are non-destructive.
@@ -68,17 +68,8 @@ impl Project {
         }
     }
 
-    /// Where the project file for a video lives.
-    pub fn path_for(video: &Path) -> PathBuf {
-        video.with_extension("velo.json")
-    }
-
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
-        let json = serde_json::to_vec(self).map_err(std::io::Error::other)?;
-        // Write then rename so a crash never leaves a half-written project beside a good video.
-        let tmp = path.with_extension("json.tmp");
-        std::fs::write(&tmp, json)?;
-        std::fs::rename(tmp, path)
+        crate::library::write_atomic(path, &serde_json::to_vec(self).map_err(std::io::Error::other)?)
     }
 
     pub fn load(path: &Path) -> std::io::Result<Self> {
@@ -118,13 +109,11 @@ mod tests {
     fn save_and_load_round_trip() {
         let dir = std::env::temp_dir().join(format!("velo-core-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let video = dir.join("clip.mp4");
-        let path = Project::path_for(&video);
-        assert!(path.to_string_lossy().ends_with("clip.velo.json"));
+        let path = dir.join("projects").join("clip.json");
         let p = sample(vec![click(5_000)]);
         p.save(&path).unwrap();
         assert_eq!(Project::load(&path).unwrap(), p);
-        assert!(!path.with_extension("json.tmp").exists());
+        assert!(!path.with_extension("tmp").exists());
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

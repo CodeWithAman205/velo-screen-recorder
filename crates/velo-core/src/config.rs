@@ -24,6 +24,8 @@ pub struct StartConfig {
     pub mic_device: usize,
     /// Microphone volume, 0 to 100.
     pub mic_gain: u32,
+    /// Suppress steady background noise on the microphone.
+    pub noise: bool,
     pub camera: bool,
     pub cursor: bool,
     pub fps: u32,
@@ -48,6 +50,7 @@ impl Default for StartConfig {
             mic: true,
             mic_device: 0,
             mic_gain: 80,
+            noise: true,
             camera: false,
             cursor: true,
             fps: 60,
@@ -66,10 +69,10 @@ impl StartConfig {
         self.fps.clamp(15, 120)
     }
 
-    /// Target video bitrate. Studio mode records near-lossless footage because it is re-encoded on export.
+    /// Target video bitrate. Studio footage gets a generous bitrate because it is re-encoded on export.
     pub fn bitrate_bps(&self, width: u32, height: u32) -> u32 {
         let bits_per_pixel = if self.studio {
-            0.20
+            0.12
         } else {
             match self.bitrate.as_str() {
                 "Low" => 0.05,
