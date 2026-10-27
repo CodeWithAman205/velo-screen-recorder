@@ -1,4 +1,5 @@
 import { icon, card, row, seg, switchBtn, range, screenArt, fmtShort } from '../ui.js';
+import { assetUrl } from '../bridge.js';
 import { library, ui, editor, BACKGROUNDS } from '../state.js';
 
 export const canvasVars = () =>
@@ -52,7 +53,7 @@ export function view() {
     <div class="grid editor">
       <div class="stack">
         <section class="card">
-          <div class="canvas" style="${canvasVars()}"><div class="frame">${screenArt({})}</div></div>
+          <div class="canvas" style="${canvasVars()}"><div class="frame">${assetUrl(rec.thumbnail) ? `<img class="feed-full" src="${assetUrl(rec.thumbnail)}" alt="" />` : screenArt({})}</div></div>
           <div class="transport">
             <button class="btn" data-act="play">${icon('play')}Play</button>
             <span class="muted">${fmtShort(0)} / ${fmtShort(rec.seconds)}</span>

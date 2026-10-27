@@ -20,6 +20,7 @@ function config() {
     mic: settings.mic,
     micDevice: settings.micDevice,
     micGain: settings.micGain,
+    noise: settings.noise,
     camera: settings.camera,
     cursor: settings.cursor,
     fps: Number(settings.fps),
@@ -80,25 +81,24 @@ export async function stop() {
   clearInterval(timer);
   const { date, time } = stamp();
   const seconds = session.seconds;
+  // Browser preview only: the real engine returns the finished library entry.
   finished({
-    path: '',
+    id: String(Date.now()),
+    name: settings.pattern.replace('{date}', date).replace('{time}', time),
+    video: '',
+    thumbnail: null,
+    project: null,
     seconds,
     sizeMb: Math.max(1, seconds * 0.9),
-    name: settings.pattern.replace('{date}', date).replace('{time}', time),
+    createdMs: Date.now(),
+    studio: settings.recordMode === 'Studio',
+    screen: { w: 1920, h: 1080 },
+    missing: false,
   });
 }
 
 function finished(done) {
-  addRecording({
-    id: String(Date.now()),
-    name: done.name ?? (done.path.split(/[\\/]/).pop() || 'Recording').replace(/\.mp4$/i, ''),
-    path: done.path,
-    projectPath: done.projectPath ?? null,
-    seconds: done.seconds,
-    size: done.sizeMb,
-    mode: settings.mode,
-    createdAt: Date.now(),
-  });
+  addRecording(done);
   Object.assign(session, { recording: false, paused: false, saving: false, seconds: 0 });
   emit('state');
 }

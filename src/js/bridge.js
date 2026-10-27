@@ -7,6 +7,11 @@ export const inTauri = Boolean(tauri?.core?.invoke);
 
 const mock = {
   list_sources: async () => null,
+  library_list: async () => null,
+  library_remove: async () => {},
+  start_preview: async () => {},
+  stop_preview: async () => {},
+  source_thumbnails: async () => {},
   start_recording: async () => {},
   stop_recording: async () => ({ path: '', seconds: 0, sizeMb: 0 }),
   pause_recording: async () => {},
@@ -24,6 +29,11 @@ export async function invoke(cmd, args) {
 export async function listen(event, handler) {
   if (!inTauri) return () => {};
   return tauri.event.listen(event, (e) => handler(e.payload));
+}
+
+/** A URL the page can use to show a local file (thumbnail, video). Empty in the browser preview. */
+export function assetUrl(path) {
+  return inTauri && path ? tauri.core.convertFileSrc(path) : '';
 }
 
 export function windowControl(action) {

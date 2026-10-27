@@ -86,12 +86,17 @@ pub struct Preview {
 impl Preview {
     pub fn start(mode: CaptureMode, index: usize, on_frame: FrameSink) -> Result<Self, String> {
         let item = resolve(mode, index)?;
+        // Asking Windows to limit the frame rate needs a recent Windows 11 build; without it we
+        // simply receive every frame and drop the extras ourselves.
         let control = start_item::<Live>(
             &item,
             CursorCaptureSettings::WithCursor,
             MinimumUpdateIntervalSettings::Custom(PREVIEW_INTERVAL),
-            on_frame,
-        )?;
+            on_frame.clone(),
+        )
+        .or_else(|_| {
+            start_item::<Live>(&item, CursorCaptureSettings::WithCursor, MinimumUpdateIntervalSettings::Default, on_frame)
+        })?;
         Ok(Self { control: Some(control) })
     }
 

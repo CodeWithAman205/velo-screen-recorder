@@ -1,6 +1,6 @@
 import { icon, hydrate, fmtTime } from './ui.js';
 import { inTauri, invoke, listen, windowControl } from './bridge.js';
-import { settings, set, toggle, resetSettings, session, library, removeRecording, editor, ui, subscribe, devices, setDevices } from './state.js';
+import { settings, set, toggle, resetSettings, session, library, setLibrary, removeRecording, editor, ui, subscribe, devices, setDevices, live } from './state.js';
 import * as sess from './session.js';
 import { connectBackend } from './session.js';
 import { view as recordView } from './views/record.js';
@@ -42,11 +42,13 @@ function render() {
   const caret = wasSearch ? active.selectionStart : 0;
   page.innerHTML = ROUTES[route].view();
   paintShell();
+  syncPreview();
   if (wasSearch) { const el = page.querySelector('[data-search]'); el?.focus(); el?.setSelectionRange(caret, caret); }
 }
 
 function go(name) {
   route = ROUTES[name] ? name : 'record';
+  if (route === 'library') loadLibrary();
   if (location.hash !== `#/${route}`) history.replaceState(null, '', `#/${route}`);
   render();
   $('page').parentElement.scrollTop = 0;
@@ -65,7 +67,7 @@ function toast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
 }
-const SOON = 'This works once the recording engine is connected.';
+const SOON = 'Coming soon.';
 
 // ---------- Input handling ----------
 const assign = (key, value) => (EDITOR_KEYS.has(key) ? (editor[key] = value) : set(key, value));
@@ -76,9 +78,14 @@ const ACTIONS = {
   pause: () => sess.togglePause(),
   cancel: () => sess.cancelCountdown(),
   edit: (el) => { ui.editorId = el.dataset.id; go('editor'); },
-  delete: (el) => { removeRecording(el.dataset.id); render(); },
-  reveal: (el) => { const r = library.find((x) => x.id === el.dataset.id); invoke('reveal_in_folder', { path: r?.path }); toast(SOON); },
-  'reveal-folder': () => { invoke('reveal_in_folder', { path: settings.folder }); toast(SOON); },
+  delete: async (el) => {
+    await invoke('library_remove', { id: el.dataset.id, deleteVideo: false });
+    removeRecording(el.dataset.id);
+    render();
+    toast('Removed from the library. The video file is still in your folder.');
+  },
+  reveal: (el) => { const r = library.find((x) => x.id === el.dataset.id); invoke('reveal_in_folder', { path: r?.video ?? '' }); },
+  'reveal-folder': () => invoke('reveal_in_folder', { path: settings.folder }),
   reset: () => { resetSettings(); applyTheme(settings.theme); render(); },
   play: () => toast(SOON),
   export: () => toast(SOON),
@@ -185,13 +192,58 @@ async function refreshSources() {
   if (settings.window >= devices.windows.length) set('window', 0);
   if (settings.micDevice >= devices.mics.length) set('micDevice', 0);
   render();
+  // Real pictures of each screen (and window), delivered one by one as they are captured.
+  invoke('source_thumbnails', { kind: 'display' });
+  if (settings.mode === 'window') invoke('source_thumbnails', { kind: 'window' });
 }
+
+async function loadLibrary() {
+  const items = await invoke('library_list');
+  if (!items) return;
+  setLibrary(items);
+  if (route === 'library' || route === 'editor') render(); else paintShell();
+}
+
+// ---------- Live preview ----------
+let previewKey = '';
+
+/** Which screen or window to show live, or null when no preview should run. */
+function wantedPreview() {
+  if (!inTauri || route !== 'record' || document.hidden) return null;
+  if (session.recording || session.counting || session.saving) return null;
+  if (settings.mode === 'display' && devices.displays.length) return { mode: 'display', index: settings.display };
+  if (settings.mode === 'window' && devices.windows.length) return { mode: 'window', index: settings.window };
+  return null;
+}
+
+function syncPreview() {
+  const want = wantedPreview();
+  const key = want ? `${want.mode}:${want.index}` : '';
+  if (key === previewKey) return;
+  previewKey = key;
+  live.frame = '';
+  if (!want) { invoke('stop_preview'); return; }
+  invoke('start_preview', want).catch((e) => { previewKey = ''; toast(String(e)); });
+}
+
+document.addEventListener('visibilitychange', syncPreview);
 
 async function initBackend() {
   if (!inTauri) return;
   await connectBackend();
   await listen('levels', (l) => { real.mic = l.mic; real.system = l.system; });
+  await listen('preview-frame', (b64) => {
+    live.frame = b64;
+    const img = document.querySelector('[data-feed="preview"]');
+    if (img) img.src = `data:image/jpeg;base64,${b64}`; else if (route === 'record') render();
+  });
+  await listen('source-thumb', ({ kind, index, jpeg }) => {
+    live.thumbs[kind][index] = jpeg;
+    const img = document.querySelector(`[data-feed="thumb-${kind}-${index}"]`);
+    if (img && jpeg) img.src = `data:image/jpeg;base64,${jpeg}`; else if (route === 'record') render();
+  });
   invoke('set_close_to_tray', { enabled: settings.onClose === 'Hide to tray' });
+  loadLibrary();
   refreshSources();
 }
 

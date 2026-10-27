@@ -60,9 +60,15 @@ export function meter(id, active) {
 }
 
 /** Stand-in for a captured screen until real thumbnails come from the Rust side. */
-export function screenArt({ badge = '', region = false, cam = '', live = '' } = {}) {
-  return `<div class="screen">
-    <div class="win w1"></div><div class="win w2"></div><div class="taskbar"></div>
+export function screenArt({ badge = '', region = false, cam = '', live = '', image = '', id = '', wait = '' } = {}) {
+  // With a real picture (from the backend) show it; otherwise a neutral stand-in for the browser preview.
+  const body = image
+    ? `<img class="feed" ${id ? `data-feed="${id}"` : ''} src="${image}" alt="" />`
+    : wait
+      ? `<div class="wait">${esc(wait)}</div>`
+      : `<div class="win w1"></div><div class="win w2"></div><div class="taskbar"></div>`;
+  return `<div class="screen ${image || wait ? 'real' : ''}">
+    ${body}
     ${region ? '<div class="region"></div>' : ''}
     ${badge ? `<span class="badge">${esc(badge)}</span>` : ''}
     ${cam ? `<div class="cam ${cam === 'Square' ? 'square' : ''}"></div>` : ''}

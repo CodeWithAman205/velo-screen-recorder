@@ -237,7 +237,9 @@ fn load_project(state: State<'_, AppState>, id: String) -> Result<Project, Strin
 fn reveal_in_folder(path: String) {
     #[cfg(windows)]
     {
-        let p = Path::new(&path);
+        // The UI sends the save folder as typed (often relative to the user profile).
+        let resolved = if Path::new(&path).is_absolute() { std::path::PathBuf::from(&path) } else { engine::output_folder(&path) };
+        let p = resolved.as_path();
         let mut cmd = std::process::Command::new("explorer");
         if p.is_file() {
             cmd.arg(format!("/select,{}", p.display()));

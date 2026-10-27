@@ -1,8 +1,10 @@
 // Single source of truth for settings, the live recording session and the library.
 // Settings and the library persist to localStorage; the session lives in memory.
 
+import { inTauri } from './bridge.js';
+
 const SETTINGS_KEY = 'velo-settings-v2';
-const LIBRARY_KEY = 'velo-library-v2';
+const LIBRARY_KEY = 'velo-library-v3';
 
 const defaults = {
   theme: 'light',
@@ -56,7 +58,7 @@ export function setDevices(next) {
   if (next) Object.assign(devices, next);
 }
 
-export const devices = {
+const mockDevices = {
   displays: [
     { name: 'Display 1', detail: '1920 x 1080 (main)' },
     { name: 'Display 2', detail: '2560 x 1440' },
@@ -71,15 +73,31 @@ export const devices = {
   speakers: ['Default speakers', 'Headphones'],
 };
 
+// Inside the app the lists come from Windows; the invented ones are only for the browser design preview.
+export const devices = inTauri
+  ? { displays: [], windows: [], mics: ['Default microphone'], cameras: ['Integrated camera'], speakers: ['Default speakers'] }
+  : mockDevices;
+
 export const session = { recording: false, paused: false, saving: false, seconds: 0, counting: 0 };
 
-export const library = read(LIBRARY_KEY, []);
-export function addRecording(rec) { library.unshift(rec); write(LIBRARY_KEY, library); }
+// In the app the library lives in Rust (see library_list); in a browser it falls back to localStorage.
+export const library = inTauri ? [] : read(LIBRARY_KEY, []);
+export function setLibrary(items) {
+  library.length = 0;
+  library.push(...items);
+}
+export function addRecording(rec) {
+  library.unshift(rec);
+  if (!inTauri) write(LIBRARY_KEY, library);
+}
 export function removeRecording(id) {
   const i = library.findIndex((r) => r.id === id);
   if (i >= 0) library.splice(i, 1);
-  write(LIBRARY_KEY, library);
+  if (!inTauri) write(LIBRARY_KEY, library);
 }
+
+/** Live pictures from the backend: one per display and window, plus the running preview frame. */
+export const live = { frame: '', thumbs: { display: {}, window: {} } };
 
 export const ui = { settingsTab: 'General', search: '', sort: 'Newest', editorId: null };
 

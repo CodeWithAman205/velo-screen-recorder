@@ -1,5 +1,8 @@
 import { icon, card, row, seg, select, switchBtn, meter, screenArt, esc, fmtTime } from '../ui.js';
-import { settings, session, devices } from '../state.js';
+import { inTauri } from '../bridge.js';
+import { settings, session, devices, live } from '../state.js';
+
+const jpeg = (b64) => (b64 ? `data:image/jpeg;base64,${b64}` : '');
 
 const MODES = [
   { id: 'display', ic: 'monitor', title: 'Display', sub: 'Whole screen' },
@@ -11,8 +14,8 @@ const MODES = [
 function sourceList() {
   const pick = (key, list, current) => `<div class="sources">${list.map((s, i) => `
     <button class="source" aria-pressed="${i === current}" data-set="${key}" data-val="${i}" data-num>
-      ${screenArt({ badge: key === 'window' ? '' : `${i + 1}` })}
-      <b>${esc(s.name)}</b><small>${esc(s.detail)}</small>
+      ${screenArt({ image: jpeg(live.thumbs[key][i]), id: `thumb-${key}-${i}`, wait: inTauri && !live.thumbs[key][i] ? 'Loading…' : '' })}
+      <b>${esc(s.name || `Display ${i + 1}`)}</b><small>${esc(s.detail)}</small>
     </button>`).join('')}</div>`;
   if (settings.mode === 'display') return pick('display', devices.displays, settings.display);
   if (settings.mode === 'window') return pick('window', devices.windows, settings.window);
@@ -23,10 +26,21 @@ function sourceList() {
 }
 
 function previewBadge() {
-  if (settings.mode === 'display') return devices.displays[settings.display].name;
-  if (settings.mode === 'window') return devices.windows[settings.window].name;
+  if (settings.mode === 'display') return devices.displays[settings.display]?.name || `Display ${settings.display + 1}`;
+  if (settings.mode === 'window') return devices.windows[settings.window]?.name || 'Window';
   if (settings.mode === 'region') return `Region ${settings.aspect}`;
-  return devices.cameras[settings.cameraDevice];
+  return devices.cameras[settings.cameraDevice] ?? 'Camera';
+}
+
+/** The big picture: the live feed in the app, or the stand-in when previewing in a browser. */
+function preview(busy) {
+  const base = { badge: previewBadge(), cam: settings.camera && settings.mode !== 'camera' ? settings.cameraShape : settings.mode === 'camera' ? settings.cameraShape : '', live: liveOverlay() };
+  if (!inTauri) return screenArt({ ...base, region: settings.mode === 'region' });
+  if (settings.mode === 'region' || settings.mode === 'camera') {
+    return screenArt({ ...base, wait: 'Preview is not available for this mode yet.' });
+  }
+  if (busy) return screenArt({ ...base, wait: ' ' });
+  return screenArt({ ...base, image: jpeg(live.frame), id: 'preview', wait: live.frame ? '' : 'Loading preview…' });
 }
 
 function liveOverlay() {
@@ -82,9 +96,9 @@ export function view() {
   const inputs = card({
     ic: 'mic', title: 'Inputs',
     body: [
-      row({ ic: settings.mic ? 'mic' : 'mic-off', title: 'Microphone', sub: esc(devices.mics[settings.micDevice]), ctl: `${meter('mic', settings.mic)}${switchBtn('mic', settings.mic, 'Microphone')}` }),
+      row({ ic: settings.mic ? 'mic' : 'mic-off', title: 'Microphone', sub: esc(devices.mics[settings.micDevice] ?? 'Default microphone'), ctl: `${meter('mic', settings.mic)}${switchBtn('mic', settings.mic, 'Microphone')}` }),
       row({ ic: settings.system ? 'volume-2' : 'volume-x', title: 'System sound', sub: 'Everything your PC plays', ctl: `${meter('system', settings.system)}${switchBtn('system', settings.system, 'System sound')}` }),
-      row({ ic: settings.camera ? 'webcam' : 'camera-off', title: 'Camera', sub: esc(devices.cameras[settings.cameraDevice]), ctl: switchBtn('camera', settings.camera, 'Camera') }),
+      row({ ic: settings.camera ? 'webcam' : 'camera-off', title: 'Camera', sub: esc(devices.cameras[settings.cameraDevice] ?? 'Camera'), ctl: switchBtn('camera', settings.camera, 'Camera') }),
       settings.camera ? row({ title: 'Camera shape', ctl: seg('cameraShape', ['Circle', 'Square'], settings.cameraShape) }) : '',
     ].join(''),
   });
@@ -110,7 +124,7 @@ export function view() {
         ${modeTiles}
         ${card({
           ic: 'monitor', title: 'Preview', hint: esc(previewBadge()),
-          body: `${screenArt({ badge: previewBadge(), region: settings.mode === 'region', cam: camOn || settings.mode === 'camera' ? settings.cameraShape : '', live: liveOverlay() })}${busy ? '' : sourceList()}`,
+          body: `${preview(busy)}${busy ? '' : sourceList()}`,
         })}
       </div>
       <div class="stack">
